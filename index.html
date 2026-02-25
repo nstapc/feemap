@@ -160,26 +160,41 @@
     .heatmap-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
-      padding: 24px;
-      overflow-x: auto;
+      padding: 24px 24px 16px;
     }
 
+    /* One row per year */
+    .year-block {
+      margin-bottom: 20px;
+    }
+    .year-block:last-child { margin-bottom: 0; }
+
+    .year-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .year-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      color: var(--orange);
+      width: 46px;
+      flex-shrink: 0;
+      line-height: 1;
+    }
     .month-labels {
       display: flex;
-      margin-left: 28px;
-      margin-bottom: 6px;
+      flex: 1;
       font-size: 10px;
       color: var(--muted);
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       user-select: none;
-      min-width: fit-content;
     }
 
     .grid-outer {
       display: flex;
       gap: 0;
-      min-width: fit-content;
     }
 
     .day-labels {
@@ -188,6 +203,8 @@
       gap: 2px;
       margin-right: 6px;
       padding-top: 2px;
+      width: 28px;
+      flex-shrink: 0;
     }
     .day-label {
       height: 11px;
@@ -196,6 +213,7 @@
       letter-spacing: 0.08em;
       line-height: 11px;
       user-select: none;
+      text-align: right;
     }
 
     .grid {
@@ -342,8 +360,8 @@
       </div>
     </div>
     <div style="font-size:11px; color:var(--muted); text-align:right; line-height:1.8;">
-      Data via <a href="https://mempool.space" target="_blank" style="color:var(--orange);text-decoration:none;">mempool.space</a><br>
-      Past 365 days
+      Data via blockchain.info</a><br>
+      All historical data
     </div>
   </header>
 
@@ -365,7 +383,7 @@
       <div class="stat-unit" id="stat-30d-unit">sat / vByte</div>
     </div>
     <div class="stat fade-in" style="animation-delay:0.15s">
-      <div class="stat-label">Peak (1y)</div>
+      <div class="stat-label">Peak (all)</div>
       <div class="stat-value" id="stat-peak">—</div>
       <div class="stat-unit" id="stat-peak-unit">sat / vByte</div>
     </div>
@@ -387,19 +405,7 @@
 
   <!-- HEATMAP -->
   <div class="heatmap-wrap fade-in" style="animation-delay:0.25s">
-    <div class="month-labels" id="month-labels"></div>
-    <div class="grid-outer">
-      <div class="day-labels">
-        <div class="day-label" style="margin-top:0">MON</div>
-        <div class="day-label"></div>
-        <div class="day-label">WED</div>
-        <div class="day-label"></div>
-        <div class="day-label">FRI</div>
-        <div class="day-label"></div>
-        <div class="day-label">SUN</div>
-      </div>
-      <div class="grid" id="heatmap-grid"></div>
-    </div>
+    <div id="heatmap-years"></div>
     <div class="legend">
       <span>LOW</span>
       <div class="legend-cells">
@@ -487,136 +493,204 @@ function modeUnit() {
   return mode === 'sat' ? 'sat / vByte' : 'USD / tx (est.)';
 }
 
-// ── Build date range (last 365 days) ─────────────────────────────────────
+// ── Build date range from earliest data point to today ───────────────────
 function buildDateRange() {
+  const keys = Object.keys(dailyData);
+  const today = new Date(); today.setUTCHours(0,0,0,0);
+  const end = today.toISOString().slice(0, 10);
+
+  let startStr;
+  if (keys.length > 0) {
+    startStr = keys.slice().sort()[0];
+  } else {
+    const s = new Date(today); s.setUTCDate(s.getUTCDate() - 364);
+    startStr = s.toISOString().slice(0, 10);
+  }
+
   const days = [];
-  const end = new Date(); end.setHours(0,0,0,0);
-  const start = new Date(end); start.setDate(start.getDate() - 364);
-  const cur = new Date(start);
-  while (cur <= end) {
+  const cur = new Date(startStr + 'T00:00:00Z');
+  const endDate = new Date(end + 'T00:00:00Z');
+  while (cur <= endDate) {
     days.push(cur.toISOString().slice(0, 10));
-    cur.setDate(cur.getDate() + 1);
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return days;
 }
 
-// ── Skeleton render ───────────────────────────────────────────────────────
-function renderSkeleton() {
-  const grid = $('heatmap-grid');
-  grid.innerHTML = '';
-  const days = buildDateRange();
-  // pad to start on Monday
-  const firstDow = new Date(days[0]).getDay(); // 0=Sun
-  const pad = (firstDow === 0 ? 1 : firstDow === 1 ? 0 : firstDow - 1);
-
-  let weekEl = null;
-  let dayInWeek = pad;
-
-  function newWeek() {
-    weekEl = document.createElement('div');
-    weekEl.className = 'week-col';
-    grid.appendChild(weekEl);
-  }
-
-  newWeek();
-  for (let p = 0; p < pad; p++) {
-    const cell = document.createElement('div');
-    cell.className = 'cell empty skeleton';
-    weekEl.appendChild(cell);
-  }
-
-  days.forEach(d => {
-    if (dayInWeek === 7) { dayInWeek = 0; newWeek(); }
-    const cell = document.createElement('div');
-    cell.className = 'cell skeleton';
-    weekEl.appendChild(cell);
-    dayInWeek++;
-  });
+// ── Helper: day-of-week offset (Mon=0 … Sun=6) ───────────────────────────
+function dowOffset(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z').getUTCDay(); // 0=Sun
+  return d === 0 ? 6 : d - 1; // convert to Mon=0
 }
 
-// ── Full render ───────────────────────────────────────────────────────────
+// ── Skeleton render ───────────────────────────────────────────────────────
+function renderSkeleton() {
+  const wrap = $('heatmap-years');
+  wrap.innerHTML = '';
+  // Just show a single placeholder row
+  const block = document.createElement('div');
+  block.className = 'year-block';
+  block.innerHTML = `
+    <div class="year-header">
+      <div class="year-label" style="background:#1e1e1e;width:38px;height:18px;border-radius:2px"></div>
+    </div>
+    <div class="grid-outer">
+      <div class="day-labels">
+        <div class="day-label">MON</div><div class="day-label"></div>
+        <div class="day-label">WED</div><div class="day-label"></div>
+        <div class="day-label">FRI</div><div class="day-label"></div>
+        <div class="day-label">SUN</div>
+      </div>
+      <div class="grid">${Array(53).fill('<div class="week-col">' + Array(7).fill('<div class="cell skeleton"></div>').join('') + '</div>').join('')}</div>
+    </div>`;
+  wrap.appendChild(block);
+}
+
+// ── Full render — one row per calendar year ───────────────────────────────
 function render() {
-  const grid = $('heatmap-grid');
-  const monthLabels = $('month-labels');
-  grid.innerHTML = '';
-  monthLabels.innerHTML = '';
+  const wrap = $('heatmap-years');
+  wrap.innerHTML = '';
 
-  const days = buildDateRange();
-  const rates = days.map(d => dailyData[d]?.avgFeeRate ?? null).filter(r => r !== null);
-  const maxRate = rates.length ? Math.max(...rates) : 100;
+  const allKeys = Object.keys(dailyData);
+  if (!allKeys.length) return;
 
-  const firstDow = new Date(days[0]).getDay();
-  const pad = (firstDow === 0 ? 1 : firstDow === 1 ? 0 : firstDow - 1);
+  const rates = allKeys.map(k => dailyData[k].avgFeeRate).filter(Boolean);
+  const sorted = [...rates].sort((a, b) => a - b);
+  const maxRate = sorted.length ? sorted[Math.floor(sorted.length * 0.99)] : 100;
 
-  let weekEl = null;
-  let dayInWeek = pad;
-  let weekIndex = 0;
-  const monthPositions = {};
+  const earliestYear = parseInt(allKeys.sort()[0].slice(0, 4));
+  const currentYear  = new Date().getUTCFullYear();
+  const monthNames   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  function newWeek() {
-    weekEl = document.createElement('div');
-    weekEl.className = 'week-col';
-    grid.appendChild(weekEl);
-    weekIndex++;
-  }
+  for (let year = earliestYear; year <= currentYear; year++) {
+    const isCurrentYear = year === currentYear;
+    const yearEnd = isCurrentYear
+      ? new Date().toISOString().slice(0, 10)
+      : `${year}-12-31`;
 
-  newWeek();
-  for (let p = 0; p < pad; p++) {
-    const cell = document.createElement('div');
-    cell.className = 'cell empty';
-    weekEl.appendChild(cell);
-  }
-
-  days.forEach((key, i) => {
-    if (dayInWeek === 7) { dayInWeek = 0; newWeek(); }
-
-    const month = key.slice(0, 7);
-    if (!monthPositions[month] && (dayInWeek === 0 || i === 0)) {
-      monthPositions[month] = weekIndex;
+    // Build every calendar day Jan 1 → Dec 31 (or today)
+    const yearDays = [];
+    const cur = new Date(`${year}-01-01T00:00:00Z`);
+    const end = new Date(yearEnd + 'T00:00:00Z');
+    while (cur <= end) {
+      yearDays.push(cur.toISOString().slice(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
     }
 
-    const entry = dailyData[key];
-    const rate  = entry?.avgFeeRate ?? null;
-    const tier  = rate !== null ? feeTier(rate, maxRate) : 0;
+    // ── Build grid columns ──────────────────────────────────────────────
+    const pad = dowOffset(`${year}-01-01`);
+    const weeks = []; // array of 7-slot arrays
+    let week = new Array(pad).fill(null); // null = empty padding
 
-    const cell = document.createElement('div');
-    cell.className = `cell fee-${tier}`;
+    yearDays.forEach(key => {
+      if (week.length === 7) { weeks.push(week); week = []; }
+      week.push(key);
+    });
+    if (week.length) {
+      while (week.length < 7) week.push(null);
+      weeks.push(week);
+    }
 
-    cell.addEventListener('mouseenter', e => showTip(e, key, rate, entry));
-    cell.addEventListener('mousemove',  e => moveTip(e));
-    cell.addEventListener('mouseleave', hideTip);
+    // ── Month label positions ──────────────────────────────────────────
+    // For each month, find which week column its 1st day lands in
+    const monthCols = {}; // month index (0-11) → week column index
+    weeks.forEach((wk, wi) => {
+      wk.forEach(key => {
+        if (!key) return;
+        const m = parseInt(key.slice(5, 7)) - 1;
+        const d = parseInt(key.slice(8, 10));
+        if (d <= 7 && monthCols[m] === undefined) monthCols[m] = wi;
+      });
+    });
 
-    weekEl.appendChild(cell);
-    dayInWeek++;
-  });
+    // ── DOM ────────────────────────────────────────────────────────────
+    const block = document.createElement('div');
+    block.className = 'year-block';
 
-  // month labels
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let lastPos = 0;
-  const CELL_W = 13; // cell + gap
-  Object.entries(monthPositions).forEach(([month, pos]) => {
-    const span = document.createElement('span');
-    span.textContent = monthNames[+month.slice(5) - 1];
-    span.style.width = `${(pos - lastPos) * CELL_W}px`;
-    span.style.display = 'inline-block';
-    span.style.overflow = 'hidden';
-    span.style.whiteSpace = 'nowrap';
-    monthLabels.appendChild(span);
-    lastPos = pos;
-  });
+    // header: year + month labels
+    const header = document.createElement('div');
+    header.className = 'year-header';
+
+    const yl = document.createElement('div');
+    yl.className = 'year-label';
+    yl.textContent = year;
+    header.appendChild(yl);
+
+    const monthRow = document.createElement('div');
+    monthRow.className = 'month-labels';
+    monthRow.style.position = 'relative';
+    monthRow.style.height = '14px';
+    monthRow.style.flex = '1';
+
+    const CELL_W = 13;
+    Object.entries(monthCols).forEach(([m, col]) => {
+      const span = document.createElement('span');
+      span.textContent = monthNames[+m];
+      span.style.cssText = `position:absolute;left:${col * CELL_W}px;white-space:nowrap;overflow:hidden`;
+      monthRow.appendChild(span);
+    });
+    header.appendChild(monthRow);
+
+    // grid
+    const gridOuter = document.createElement('div');
+    gridOuter.className = 'grid-outer';
+
+    const dayLabels = document.createElement('div');
+    dayLabels.className = 'day-labels';
+    ['MON','','WED','','FRI','','SUN'].forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'day-label';
+      d.textContent = t;
+      dayLabels.appendChild(d);
+    });
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+
+    weeks.forEach(wk => {
+      const weekEl = document.createElement('div');
+      weekEl.className = 'week-col';
+      wk.forEach(key => {
+        const cell = document.createElement('div');
+        if (!key) {
+          cell.className = 'cell empty';
+        } else {
+          const entry = dailyData[key];
+          const rate  = entry?.avgFeeRate ?? null;
+          const tier  = rate !== null ? feeTier(rate, maxRate) : 0;
+          cell.className = `cell fee-${tier}`;
+          cell.addEventListener('mouseenter', e => showTip(e, key, rate, entry));
+          cell.addEventListener('mousemove',  e => moveTip(e));
+          cell.addEventListener('mouseleave', hideTip);
+        }
+        weekEl.appendChild(cell);
+      });
+      grid.appendChild(weekEl);
+    });
+
+    gridOuter.appendChild(dayLabels);
+    gridOuter.appendChild(grid);
+    block.appendChild(header);
+    block.appendChild(gridOuter);
+    wrap.appendChild(block);
+  }
 
   updateStats(maxRate);
 }
-
 function updateStats(maxRate) {
-  const days = buildDateRange();
-
+  // Build recent days directly without depending on buildDateRange
   if (currentFee !== null) {
     $('stat-current').textContent = currentFee;
   }
 
-  const recent7  = days.slice(-7).map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
-  const recent30 = days.slice(-30).map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
+  const today = new Date(); today.setUTCHours(0,0,0,0);
+  const recentDays = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today); d.setUTCDate(d.getUTCDate() - i);
+    recentDays.push(d.toISOString().slice(0, 10));
+  }
+  const recent7  = recentDays.slice(-7).map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
+  const recent30 = recentDays.map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
   const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
 
   const a7  = avg(recent7);
@@ -642,7 +716,7 @@ function showTip(e, key, rate, entry) {
       ? `${rate < 10 ? rate.toFixed(1) : Math.round(rate)}`
       : formatFee(rate);
     $('tip-unit').textContent = modeUnit();
-    $('tip-blocks').textContent = entry?.blocks ? `${entry.blocks} blocks` : '';
+    $('tip-blocks').textContent = entry?.interpolated ? 'est. (interpolated)' : (entry?.blocks ? `${entry.blocks} blocks` : '');
   } else {
     $('tip-val').textContent  = 'No data';
     $('tip-unit').textContent = '';
@@ -671,99 +745,81 @@ function setMode(m) {
 }
 
 // ── API Fetching ──────────────────────────────────────────────────────────
+// Fetch one year's worth of daily data from blockchain.info
+// timespan=1year gives daily resolution; fetching year-by-year avoids the
+// sampled/weekly data that timespan=all returns for older periods.
+
+function ingestChartPair(feesValues, txValues) {
+  const txByDay = {};
+  txValues.forEach(p => { txByDay[p.x] = p.y; });
+  feesValues.forEach(p => {
+    const ts      = p.x;
+    const feesBtc = p.y;
+    const txCount = txByDay[ts] ?? 300000;
+    const rate    = (feesBtc * 1e8) / (txCount * 250);
+    if (rate > 0) dailyData[dateKey(ts)] = { avgFeeRate: rate };
+  });
+}
+
+async function fetchYearChunk(startTs) {
+  const base = 'https://api.blockchain.info/charts';
+  const qs   = `start=${startTs}&timespan=1year&format=json&cors=true`;
+  const [fR, tR] = await Promise.all([
+    fetch(`${base}/transaction-fees?${qs}`),
+    fetch(`${base}/n-transactions?${qs}`),
+  ]);
+  if (!fR.ok || !tR.ok) throw new Error(`HTTP ${fR.status}/${tR.status}`);
+  const [fD, tD] = await Promise.all([fR.json(), tR.json()]);
+  ingestChartPair(fD.values ?? [], tD.values ?? []);
+}
+
 async function fetchCurrentFees() {
   try {
-    const r = await fetch('https://mempool.space/api/v1/fees/recommended');
+    const r = await fetch('https://api.blockchair.com/bitcoin/stats');
     const d = await r.json();
-    currentFee = d.halfHourFee ?? d.fastestFee ?? null;
-    if (currentFee) $('stat-current').textContent = currentFee;
+    const fee = d?.data?.suggested_transaction_fee_per_byte_sat;
+    if (fee) { currentFee = fee; $('stat-current').textContent = fee; }
   } catch {}
 }
 
 async function fetchBTCPrice() {
   try {
-    const r = await fetch('https://mempool.space/api/v1/prices');
+    const r = await fetch('https://api.blockchain.info/ticker');
     const d = await r.json();
-    btcPrice = d.USD ?? 0;
-    if (btcPrice) $('stat-price').textContent = `$${btcPrice.toLocaleString()}`;
+    btcPrice = d?.USD?.last ?? 0;
+    if (btcPrice) $('stat-price').textContent = `$${Math.round(btcPrice).toLocaleString()}`;
   } catch {}
 }
 
 async function fetchFeeHistory() {
-  // mempool.space fee rates endpoint returns [[timestamp, p25, p50, p75, p100], ...]
-  // where values are in sat/vByte
-  const ENDPOINT = 'https://mempool.space/api/v1/mining/blocks/fee-rates/all';
+  const currentYear = new Date().getUTCFullYear();
+  const startYear   = 2009;
 
-  try {
-    const r = await fetch(ENDPOINT);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const raw = await r.json();
+  // Build unix timestamps for Jan 1 of each year
+  const yearStarts = [];
+  for (let y = startYear; y <= currentYear; y++) {
+    yearStarts.push(Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000));
+  }
 
-    // raw is array of objects: { avgHeight, timestamp, avgFeeRates: {p25,p50,p75,p100,p125,p250,p500} }
-    // or array of [timestamp, p50, ...]
-    // Handle both shapes
-    const yearAgo = Math.floor(Date.now() / 1000) - 365 * 86400;
+  setStatus(`Fetching ${yearStarts.length} years of daily data…`, false);
 
-    if (Array.isArray(raw)) {
-      raw.forEach(entry => {
-        let ts, rate, blocks;
-        if (typeof entry === 'object' && !Array.isArray(entry)) {
-          ts    = entry.timestamp;
-          rate  = entry.avgFeeRates?.p50 ?? entry.p50 ?? entry.avgFee ?? null;
-          blocks = 1;
-        } else if (Array.isArray(entry)) {
-          ts   = entry[0];
-          rate = entry[1] ?? null;
-          blocks = 1;
-        }
-        if (ts < yearAgo) return;
-        if (rate === null) return;
-        const key = dateKey(ts);
-        if (!dailyData[key]) {
-          dailyData[key] = { avgFeeRate: 0, blocks: 0, sum: 0 };
-        }
-        dailyData[key].sum    += rate;
-        dailyData[key].blocks += blocks;
-        dailyData[key].avgFeeRate = dailyData[key].sum / dailyData[key].blocks;
-      });
-    }
+  // Fetch all years in parallel (blockchain.info handles it fine)
+  const results = await Promise.allSettled(yearStarts.map(ts => fetchYearChunk(ts)));
 
-    const days = Object.keys(dailyData).length;
-    setStatus(`Loaded ${days} days of data`, false);
-    render();
-    return true;
-  } catch (err) {
-    console.warn('fee-rates/all failed, trying fallback', err);
+  const failed = results.filter(r => r.status === 'rejected').length;
+  const days   = Object.keys(dailyData).length;
+
+  if (days === 0) {
+    setStatus('Failed to load data — check console', true);
     return false;
   }
-}
 
-async function fetchFeeHistoryFallback() {
-  // Fallback: fetch recent blocks and aggregate
-  try {
-    // We can get last ~10 blocks to seed today's data
-    const r = await fetch('https://mempool.space/api/v1/blocks');
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const blocks = await r.json();
-
-    blocks.forEach(b => {
-      const ts   = b.timestamp;
-      const rate = b.extras?.medianFee ?? b.extras?.avgFeeRate ?? null;
-      if (!rate) return;
-      const key = dateKey(ts);
-      if (!dailyData[key]) dailyData[key] = { avgFeeRate: 0, blocks: 0, sum: 0 };
-      dailyData[key].sum    += rate;
-      dailyData[key].blocks += 1;
-      dailyData[key].avgFeeRate = dailyData[key].sum / dailyData[key].blocks;
-    });
-
-    setStatus('Partial data loaded (showing recent blocks)', false);
-    render();
-  } catch (err) {
-    setStatus('Could not load fee data. Check network settings.', true);
-    // Still render skeleton-turned-empty
-    render();
-  }
+  const msg = failed > 0
+    ? `Loaded ${days} days (${failed} year chunks failed)`
+    : `Loaded ${days} days of data`;
+  setStatus(msg, failed > 0);
+  render();
+  return true;
 }
 
 function setStatus(msg, error = false) {
@@ -775,16 +831,11 @@ function setStatus(msg, error = false) {
 // ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
   renderSkeleton();
-  setStatus('Connecting to mempool.space…', false);
+  setStatus('Connecting…', false);
 
   await Promise.all([fetchCurrentFees(), fetchBTCPrice()]);
+  await fetchFeeHistory();
 
-  const ok = await fetchFeeHistory();
-  if (!ok || Object.keys(dailyData).length < 10) {
-    await fetchFeeHistoryFallback();
-  }
-
-  // Refresh current fee every 60s
   setInterval(fetchCurrentFees, 60_000);
 }
 

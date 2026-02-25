@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bitcoin Fee Heatmap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0c0c0c;
+      --surface:   #141414;
+      --border:    #222;
+      --text:      #e8e0d4;
+      --muted:     #5a5248;
+      --orange:    #f7931a;
+      --orange-dim:#7a3d00;
+
+      /* fee heat scale */
+      --c0: #141414;
+      --c1: #2a1500;
+      --c2: #552b00;
+      --c3: #8c4a00;
+      --c4: #c46200;
+      --c5: #f7931a;
+      --c6: #ffb347;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.6;
+    }
+
+    .page { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btc-symbol {
+      width: 52px; height: 52px;
+      background: var(--orange);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: #000;
+      flex-shrink: 0;
+      box-shadow: 0 0 30px rgba(247,147,26,0.4);
+    }
+
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(28px, 5vw, 48px);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      color: var(--text);
+    }
+    h1 span { color: var(--orange); }
+
+    .subtitle { font-size: 11px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; }
+
+    /* ── STATS BAR ── */
+    .stats {
+      display: flex;
+      gap: 2px;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 20px;
+      flex: 1;
+      min-width: 140px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .stat:hover { border-color: var(--orange-dim); }
+    .stat::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--orange);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .stat:hover::before { opacity: 1; }
+
+    .stat-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-unit  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ── CONTROLS ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .controls label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+    .toggle-group { display: flex; gap: 2px; }
+    .toggle-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-transform: uppercase;
+    }
+    .toggle-btn:hover { color: var(--text); border-color: var(--orange-dim); }
+    .toggle-btn.active {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: #000;
+      font-weight: 700;
+    }
+
+    /* ── HEATMAP ── */
+    .heatmap-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    .month-labels {
+      display: flex;
+      margin-left: 28px;
+      margin-bottom: 6px;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      user-select: none;
+      min-width: fit-content;
+    }
+
+    .grid-outer {
+      display: flex;
+      gap: 0;
+      min-width: fit-content;
+    }
+
+    .day-labels {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-right: 6px;
+      padding-top: 2px;
+    }
+    .day-label {
+      height: 11px;
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      line-height: 11px;
+      user-select: none;
+    }
+
+    .grid {
+      display: flex;
+      gap: 2px;
+    }
+
+    .week-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cell {
+      width: 11px;
+      height: 11px;
+      border-radius: 1px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      flex-shrink: 0;
+    }
+    .cell:hover {
+      transform: scale(1.6);
+      z-index: 10;
+      position: relative;
+      box-shadow: 0 0 8px rgba(247,147,26,0.6);
+    }
+    .cell.empty { background: transparent; cursor: default; }
+    .cell.empty:hover { transform: none; box-shadow: none; }
+
+    /* color tiers */
+    .fee-0 { background: var(--c0); }
+    .fee-1 { background: var(--c1); }
+    .fee-2 { background: var(--c2); }
+    .fee-3 { background: var(--c3); }
+    .fee-4 { background: var(--c4); }
+    .fee-5 { background: var(--c5); }
+    .fee-6 { background: var(--c6); }
+
+    /* ── LEGEND ── */
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+    .legend-cells { display: flex; gap: 2px; }
+    .legend-cell { width: 11px; height: 11px; border-radius: 1px; }
+
+    /* ── TOOLTIP ── */
+    #tooltip {
+      position: fixed;
+      background: #1e1e1e;
+      border: 1px solid var(--orange);
+      padding: 10px 14px;
+      font-size: 11px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      max-width: 200px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    }
+    #tooltip .tip-date { color: var(--muted); font-size: 10px; margin-bottom: 4px; letter-spacing: 0.1em; }
+    #tooltip .tip-val  { color: var(--orange); font-size: 16px; font-weight: 700; }
+    #tooltip .tip-unit { color: var(--muted); font-size: 10px; margin-top: 2px; }
+    #tooltip .tip-blocks { color: var(--muted); font-size: 10px; margin-top: 4px; }
+
+    /* ── STATUS / LOADING ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      margin-top: 12px;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .dot.static { animation: none; }
+    .dot.error  { background: #c0392b; animation: none; }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:0.2; }
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 56px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    footer a { color: var(--orange); text-decoration: none; font-size: 11px; letter-spacing: 0.08em; }
+    footer a:hover { text-decoration: underline; }
+    footer p { font-size: 11px; color: var(--muted); }
+
+    /* ── SKELETON ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--c0) 25%, #1e1e1e 50%, var(--c0) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 1px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ── FADE IN ── */
+    .fade-in {
+      animation: fadeIn 0.4s ease forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      .stat { min-width: 120px; }
+      .heatmap-wrap { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="btc-symbol">₿</div>
+      <div>
+        <h1>FEE<span>MAP</span></h1>
+        <div class="subtitle">Bitcoin Transaction Fee Heatmap</div>
+      </div>
+    </div>
+    <div style="font-size:11px; color:var(--muted); text-align:right; line-height:1.8;">
+      Data via <a href="https://mempool.space" target="_blank" style="color:var(--orange);text-decoration:none;">mempool.space</a><br>
+      Past 365 days
+    </div>
+  </header>
+
+  <!-- STATS BAR -->
+  <div class="stats">
+    <div class="stat fade-in">
+      <div class="stat-label">Current Fee</div>
+      <div class="stat-value" id="stat-current">—</div>
+      <div class="stat-unit">sat / vByte</div>
+    </div>
+    <div class="stat fade-in" style="animation-delay:0.05s">
+      <div class="stat-label">7-Day Avg</div>
+      <div class="stat-value" id="stat-7d">—</div>
+      <div class="stat-unit" id="stat-7d-unit">sat / vByte</div>
+    </div>
+    <div class="stat fade-in" style="animation-delay:0.1s">
+      <div class="stat-label">30-Day Avg</div>
+      <div class="stat-value" id="stat-30d">—</div>
+      <div class="stat-unit" id="stat-30d-unit">sat / vByte</div>
+    </div>
+    <div class="stat fade-in" style="animation-delay:0.15s">
+      <div class="stat-label">Peak (1y)</div>
+      <div class="stat-value" id="stat-peak">—</div>
+      <div class="stat-unit" id="stat-peak-unit">sat / vByte</div>
+    </div>
+    <div class="stat fade-in" style="animation-delay:0.2s">
+      <div class="stat-label">BTC Price</div>
+      <div class="stat-value" id="stat-price">—</div>
+      <div class="stat-unit">USD</div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <label>Display</label>
+    <div class="toggle-group">
+      <button class="toggle-btn active" id="btn-sat" onclick="setMode('sat')">sat/vB</button>
+      <button class="toggle-btn"        id="btn-usd" onclick="setMode('usd')">USD/tx</button>
+    </div>
+  </div>
+
+  <!-- HEATMAP -->
+  <div class="heatmap-wrap fade-in" style="animation-delay:0.25s">
+    <div class="month-labels" id="month-labels"></div>
+    <div class="grid-outer">
+      <div class="day-labels">
+        <div class="day-label" style="margin-top:0">MON</div>
+        <div class="day-label"></div>
+        <div class="day-label">WED</div>
+        <div class="day-label"></div>
+        <div class="day-label">FRI</div>
+        <div class="day-label"></div>
+        <div class="day-label">SUN</div>
+      </div>
+      <div class="grid" id="heatmap-grid"></div>
+    </div>
+    <div class="legend">
+      <span>LOW</span>
+      <div class="legend-cells">
+        <div class="legend-cell fee-0"></div>
+        <div class="legend-cell fee-1"></div>
+        <div class="legend-cell fee-2"></div>
+        <div class="legend-cell fee-3"></div>
+        <div class="legend-cell fee-4"></div>
+        <div class="legend-cell fee-5"></div>
+        <div class="legend-cell fee-6"></div>
+      </div>
+      <span>HIGH</span>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-bar">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Connecting to mempool.space…</span>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>
+      <a href="https://github.com/yourusername/bitcoin-fee-heatmap" target="_blank">★ Star on GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://mempool.space/api" target="_blank">API Docs</a>
+    </p>
+    <p>Not financial advice. Fees in sat/vByte (median block fee rate).</p>
+  </footer>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <div class="tip-date" id="tip-date"></div>
+  <div class="tip-val"  id="tip-val"></div>
+  <div class="tip-unit" id="tip-unit"></div>
+  <div class="tip-blocks" id="tip-blocks"></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let mode = 'sat';          // 'sat' | 'usd'
+let dailyData = {};        // { 'YYYY-MM-DD': { avgFeeRate, blocks, avgTxCount } }
+let btcPrice = 0;
+let currentFee = null;
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function dateKey(ts) {
+  const d = new Date(ts * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(key) {
+  const [y, m, d] = key.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[+m - 1]} ${+d}, ${y}`;
+}
+
+function feeTier(rate, max) {
+  if (rate === null || rate === undefined) return -1;
+  if (rate === 0) return 0;
+  const pct = rate / max;
+  if (pct < 0.05)  return 1;
+  if (pct < 0.12)  return 2;
+  if (pct < 0.25)  return 3;
+  if (pct < 0.50)  return 4;
+  if (pct < 0.80)  return 5;
+  return 6;
+}
+
+function formatFee(rate, forDisplay = false) {
+  if (mode === 'sat') {
+    return rate < 10 ? rate.toFixed(1) : Math.round(rate);
+  } else {
+    // Approximate: median tx ~250 vBytes, fee = rate * 250 sats, USD = sats/1e8 * price
+    const usd = (rate * 250 / 1e8) * btcPrice;
+    return usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
+  }
+}
+
+function modeUnit() {
+  return mode === 'sat' ? 'sat / vByte' : 'USD / tx (est.)';
+}
+
+// ── Build date range (last 365 days) ─────────────────────────────────────
+function buildDateRange() {
+  const days = [];
+  const end = new Date(); end.setHours(0,0,0,0);
+  const start = new Date(end); start.setDate(start.getDate() - 364);
+  const cur = new Date(start);
+  while (cur <= end) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+// ── Skeleton render ───────────────────────────────────────────────────────
+function renderSkeleton() {
+  const grid = $('heatmap-grid');
+  grid.innerHTML = '';
+  const days = buildDateRange();
+  // pad to start on Monday
+  const firstDow = new Date(days[0]).getDay(); // 0=Sun
+  const pad = (firstDow === 0 ? 1 : firstDow === 1 ? 0 : firstDow - 1);
+
+  let weekEl = null;
+  let dayInWeek = pad;
+
+  function newWeek() {
+    weekEl = document.createElement('div');
+    weekEl.className = 'week-col';
+    grid.appendChild(weekEl);
+  }
+
+  newWeek();
+  for (let p = 0; p < pad; p++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell empty skeleton';
+    weekEl.appendChild(cell);
+  }
+
+  days.forEach(d => {
+    if (dayInWeek === 7) { dayInWeek = 0; newWeek(); }
+    const cell = document.createElement('div');
+    cell.className = 'cell skeleton';
+    weekEl.appendChild(cell);
+    dayInWeek++;
+  });
+}
+
+// ── Full render ───────────────────────────────────────────────────────────
+function render() {
+  const grid = $('heatmap-grid');
+  const monthLabels = $('month-labels');
+  grid.innerHTML = '';
+  monthLabels.innerHTML = '';
+
+  const days = buildDateRange();
+  const rates = days.map(d => dailyData[d]?.avgFeeRate ?? null).filter(r => r !== null);
+  const maxRate = rates.length ? Math.max(...rates) : 100;
+
+  const firstDow = new Date(days[0]).getDay();
+  const pad = (firstDow === 0 ? 1 : firstDow === 1 ? 0 : firstDow - 1);
+
+  let weekEl = null;
+  let dayInWeek = pad;
+  let weekIndex = 0;
+  const monthPositions = {};
+
+  function newWeek() {
+    weekEl = document.createElement('div');
+    weekEl.className = 'week-col';
+    grid.appendChild(weekEl);
+    weekIndex++;
+  }
+
+  newWeek();
+  for (let p = 0; p < pad; p++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell empty';
+    weekEl.appendChild(cell);
+  }
+
+  days.forEach((key, i) => {
+    if (dayInWeek === 7) { dayInWeek = 0; newWeek(); }
+
+    const month = key.slice(0, 7);
+    if (!monthPositions[month] && (dayInWeek === 0 || i === 0)) {
+      monthPositions[month] = weekIndex;
+    }
+
+    const entry = dailyData[key];
+    const rate  = entry?.avgFeeRate ?? null;
+    const tier  = rate !== null ? feeTier(rate, maxRate) : 0;
+
+    const cell = document.createElement('div');
+    cell.className = `cell fee-${tier}`;
+
+    cell.addEventListener('mouseenter', e => showTip(e, key, rate, entry));
+    cell.addEventListener('mousemove',  e => moveTip(e));
+    cell.addEventListener('mouseleave', hideTip);
+
+    weekEl.appendChild(cell);
+    dayInWeek++;
+  });
+
+  // month labels
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let lastPos = 0;
+  const CELL_W = 13; // cell + gap
+  Object.entries(monthPositions).forEach(([month, pos]) => {
+    const span = document.createElement('span');
+    span.textContent = monthNames[+month.slice(5) - 1];
+    span.style.width = `${(pos - lastPos) * CELL_W}px`;
+    span.style.display = 'inline-block';
+    span.style.overflow = 'hidden';
+    span.style.whiteSpace = 'nowrap';
+    monthLabels.appendChild(span);
+    lastPos = pos;
+  });
+
+  updateStats(maxRate);
+}
+
+function updateStats(maxRate) {
+  const days = buildDateRange();
+
+  if (currentFee !== null) {
+    $('stat-current').textContent = currentFee;
+  }
+
+  const recent7  = days.slice(-7).map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
+  const recent30 = days.slice(-30).map(d => dailyData[d]?.avgFeeRate).filter(Boolean);
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+  const a7  = avg(recent7);
+  const a30 = avg(recent30);
+
+  $('stat-7d').textContent  = a7  !== null ? (mode === 'sat' ? (a7  < 10 ? a7.toFixed(1)  : Math.round(a7))  : formatFee(a7))  : '—';
+  $('stat-30d').textContent = a30 !== null ? (mode === 'sat' ? (a30 < 10 ? a30.toFixed(1) : Math.round(a30)) : formatFee(a30)) : '—';
+  $('stat-peak').textContent = maxRate > 0 ? (mode === 'sat' ? Math.round(maxRate) : formatFee(maxRate)) : '—';
+
+  ['stat-7d-unit','stat-30d-unit','stat-peak-unit'].forEach(id => {
+    $(id).textContent = modeUnit();
+  });
+
+  if (btcPrice) $('stat-price').textContent = `$${btcPrice.toLocaleString()}`;
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────
+function showTip(e, key, rate, entry) {
+  const tip = $('tooltip');
+  $('tip-date').textContent = fmtDate(key);
+  if (rate !== null) {
+    $('tip-val').textContent  = mode === 'sat'
+      ? `${rate < 10 ? rate.toFixed(1) : Math.round(rate)}`
+      : formatFee(rate);
+    $('tip-unit').textContent = modeUnit();
+    $('tip-blocks').textContent = entry?.blocks ? `${entry.blocks} blocks` : '';
+  } else {
+    $('tip-val').textContent  = 'No data';
+    $('tip-unit').textContent = '';
+    $('tip-blocks').textContent = '';
+  }
+  tip.style.display = 'block';
+  moveTip(e);
+}
+
+function moveTip(e) {
+  const tip = $('tooltip');
+  const x = e.clientX + 14;
+  const y = e.clientY - 40;
+  tip.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+  tip.style.top  = `${Math.max(y, 8)}px`;
+}
+
+function hideTip() { $('tooltip').style.display = 'none'; }
+
+// ── Mode toggle ───────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  $('btn-sat').classList.toggle('active', m === 'sat');
+  $('btn-usd').classList.toggle('active', m === 'usd');
+  render();
+}
+
+// ── API Fetching ──────────────────────────────────────────────────────────
+async function fetchCurrentFees() {
+  try {
+    const r = await fetch('https://mempool.space/api/v1/fees/recommended');
+    const d = await r.json();
+    currentFee = d.halfHourFee ?? d.fastestFee ?? null;
+    if (currentFee) $('stat-current').textContent = currentFee;
+  } catch {}
+}
+
+async function fetchBTCPrice() {
+  try {
+    const r = await fetch('https://mempool.space/api/v1/prices');
+    const d = await r.json();
+    btcPrice = d.USD ?? 0;
+    if (btcPrice) $('stat-price').textContent = `$${btcPrice.toLocaleString()}`;
+  } catch {}
+}
+
+async function fetchFeeHistory() {
+  // mempool.space fee rates endpoint returns [[timestamp, p25, p50, p75, p100], ...]
+  // where values are in sat/vByte
+  const ENDPOINT = 'https://mempool.space/api/v1/mining/blocks/fee-rates/all';
+
+  try {
+    const r = await fetch(ENDPOINT);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const raw = await r.json();
+
+    // raw is array of objects: { avgHeight, timestamp, avgFeeRates: {p25,p50,p75,p100,p125,p250,p500} }
+    // or array of [timestamp, p50, ...]
+    // Handle both shapes
+    const yearAgo = Math.floor(Date.now() / 1000) - 365 * 86400;
+
+    if (Array.isArray(raw)) {
+      raw.forEach(entry => {
+        let ts, rate, blocks;
+        if (typeof entry === 'object' && !Array.isArray(entry)) {
+          ts    = entry.timestamp;
+          rate  = entry.avgFeeRates?.p50 ?? entry.p50 ?? entry.avgFee ?? null;
+          blocks = 1;
+        } else if (Array.isArray(entry)) {
+          ts   = entry[0];
+          rate = entry[1] ?? null;
+          blocks = 1;
+        }
+        if (ts < yearAgo) return;
+        if (rate === null) return;
+        const key = dateKey(ts);
+        if (!dailyData[key]) {
+          dailyData[key] = { avgFeeRate: 0, blocks: 0, sum: 0 };
+        }
+        dailyData[key].sum    += rate;
+        dailyData[key].blocks += blocks;
+        dailyData[key].avgFeeRate = dailyData[key].sum / dailyData[key].blocks;
+      });
+    }
+
+    const days = Object.keys(dailyData).length;
+    setStatus(`Loaded ${days} days of data`, false);
+    render();
+    return true;
+  } catch (err) {
+    console.warn('fee-rates/all failed, trying fallback', err);
+    return false;
+  }
+}
+
+async function fetchFeeHistoryFallback() {
+  // Fallback: fetch recent blocks and aggregate
+  try {
+    // We can get last ~10 blocks to seed today's data
+    const r = await fetch('https://mempool.space/api/v1/blocks');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blocks = await r.json();
+
+    blocks.forEach(b => {
+      const ts   = b.timestamp;
+      const rate = b.extras?.medianFee ?? b.extras?.avgFeeRate ?? null;
+      if (!rate) return;
+      const key = dateKey(ts);
+      if (!dailyData[key]) dailyData[key] = { avgFeeRate: 0, blocks: 0, sum: 0 };
+      dailyData[key].sum    += rate;
+      dailyData[key].blocks += 1;
+      dailyData[key].avgFeeRate = dailyData[key].sum / dailyData[key].blocks;
+    });
+
+    setStatus('Partial data loaded (showing recent blocks)', false);
+    render();
+  } catch (err) {
+    setStatus('Could not load fee data. Check network settings.', true);
+    // Still render skeleton-turned-empty
+    render();
+  }
+}
+
+function setStatus(msg, error = false) {
+  $('status-text').textContent = msg;
+  const dot = $('status-dot');
+  dot.className = error ? 'dot error' : 'dot static';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+async function init() {
+  renderSkeleton();
+  setStatus('Connecting to mempool.space…', false);
+
+  await Promise.all([fetchCurrentFees(), fetchBTCPrice()]);
+
+  const ok = await fetchFeeHistory();
+  if (!ok || Object.keys(dailyData).length < 10) {
+    await fetchFeeHistoryFallback();
+  }
+
+  // Refresh current fee every 60s
+  setInterval(fetchCurrentFees, 60_000);
+}
+
+init();
+</script>
+</body>
+</html>

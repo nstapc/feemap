@@ -16,14 +16,7 @@
       --orange:    #f7931a;
       --orange-dim:#7a3d00;
 
-      /* fee heat scale */
-      --c0: #141414;
-      --c1: #2a1500;
-      --c2: #552b00;
-      --c3: #8c4a00;
-      --c4: #c46200;
-      --c5: #f7931a;
-      --c6: #ffb347;
+      /* fee colors computed inline via JS gradient */
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -236,22 +229,16 @@
       flex-shrink: 0;
     }
     .cell:hover {
-      transform: scale(1.6);
+      transform: scale(1.8);
       z-index: 10;
       position: relative;
-      box-shadow: 0 0 8px rgba(247,147,26,0.6);
+      box-shadow: 0 0 10px 2px rgba(247,147,26,0.7);
     }
     .cell.empty { background: transparent; cursor: default; }
     .cell.empty:hover { transform: none; box-shadow: none; }
 
     /* color tiers */
     .fee-0 { background: var(--c0); }
-    .fee-1 { background: var(--c1); }
-    .fee-2 { background: var(--c2); }
-    .fee-3 { background: var(--c3); }
-    .fee-4 { background: var(--c4); }
-    .fee-5 { background: var(--c5); }
-    .fee-6 { background: var(--c6); }
 
     /* ── LEGEND ── */
     .legend {
@@ -265,6 +252,16 @@
     }
     .legend-cells { display: flex; gap: 2px; }
     .legend-cell { width: 11px; height: 11px; border-radius: 1px; }
+    .legend-gradient {
+      flex: 1;
+      height: 11px;
+      border-radius: 2px;
+      background: linear-gradient(to right,
+        rgb(0,0,0), rgb(80,10,0), rgb(160,35,0),
+        rgb(220,80,0), rgb(247,147,26),
+        rgb(255,210,80), rgb(255,240,160), rgb(255,255,255));
+      margin: 0 8px;
+    }
 
     /* ── TOOLTIP ── */
     #tooltip {
@@ -345,6 +342,126 @@
       .stat { min-width: 120px; }
       .heatmap-wrap { padding: 16px; }
     }
+
+    /* ── DRILL-DOWN POPOVER ── */
+    #drill-panel {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      width: 300px;
+      background: #1a1a1a;
+      border: 1px solid var(--orange);
+      padding: 18px 20px 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.8), 0 0 0 1px rgba(247,147,26,0.15);
+      animation: popIn 0.15s ease forwards;
+      pointer-events: all;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* arrow pointer */
+    #drill-panel::before {
+      content: '';
+      position: absolute;
+      width: 10px; height: 10px;
+      background: #1a1a1a;
+      border-left: 1px solid var(--orange);
+      border-top: 1px solid var(--orange);
+      transform: rotate(45deg);
+    }
+    #drill-panel.arrow-below::before {
+      top: -6px; left: var(--arrow-left, 20px);
+    }
+    #drill-panel.arrow-above::before {
+      bottom: -6px; left: var(--arrow-left, 20px);
+      transform: rotate(225deg);
+    }
+
+    #drill-panel .drill-close {
+      position: absolute;
+      top: 10px; right: 12px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 14px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 6px;
+    }
+    #drill-panel .drill-close:hover { color: var(--text); }
+
+    .drill-date {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.06em;
+      color: var(--orange);
+      margin-bottom: 14px;
+      padding-right: 20px;
+    }
+
+    .drill-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      margin-bottom: 14px;
+    }
+
+    .drill-stat {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+    .drill-stat-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .drill-stat-value { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1; }
+    .drill-stat-unit  { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+    .drill-bar-wrap { margin-bottom: 14px; }
+    .drill-bar-label {
+      font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .drill-bar-track {
+      height: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      position: relative;
+      border-radius: 1px;
+    }
+    .drill-bar-fill {
+      height: 100%;
+      border-radius: 1px;
+      transition: width 0.35s ease;
+    }
+    .drill-bar-marker {
+      position: absolute;
+      top: -3px;
+      width: 2px; height: 16px;
+      background: rgba(255,255,255,0.5);
+      transform: translateX(-50%);
+    }
+    .drill-percentile-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+    .drill-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .drill-link {
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--orange); text-decoration: none;
+      border: 1px solid var(--orange-dim);
+      padding: 5px 10px;
+      transition: all 0.15s;
+    }
+    .drill-link:hover { background: var(--orange); color: #000; }
+
+    /* selected cell highlight */
+    .cell.selected {
+      outline: 2px solid #fff;
+      outline-offset: 1px;
+      z-index: 20;
+      position: relative;
+    }
   </style>
 </head>
 <body>
@@ -408,15 +525,7 @@
     <div id="heatmap-years"></div>
     <div class="legend">
       <span>LOW</span>
-      <div class="legend-cells">
-        <div class="legend-cell fee-0"></div>
-        <div class="legend-cell fee-1"></div>
-        <div class="legend-cell fee-2"></div>
-        <div class="legend-cell fee-3"></div>
-        <div class="legend-cell fee-4"></div>
-        <div class="legend-cell fee-5"></div>
-        <div class="legend-cell fee-6"></div>
-      </div>
+      <div class="legend-gradient"></div>
       <span>HIGH</span>
     </div>
   </div>
@@ -467,16 +576,30 @@ function fmtDate(key) {
   return `${months[+m - 1]} ${+d}, ${y}`;
 }
 
-function feeTier(rate, max) {
-  if (rate === null || rate === undefined) return -1;
-  if (rate === 0) return 0;
-  const pct = rate / max;
-  if (pct < 0.05)  return 1;
-  if (pct < 0.12)  return 2;
-  if (pct < 0.25)  return 3;
-  if (pct < 0.50)  return 4;
-  if (pct < 0.80)  return 5;
-  return 6;
+// Control points: [r, g, b] from dark → orange → amber → pale yellow
+const GRADIENT_STOPS = [
+  [0,   0,   0],   // 0%   pure black
+  [80,  10,  0],   // 15%  deep red-black
+  [160, 35,  0],   // 30%  dark red
+  [220, 80,  0],   // 45%  burnt orange
+  [247, 147, 26],  // 60%  bitcoin orange
+  [255, 210, 80],  // 75%  amber
+  [255, 240, 160], // 90%  pale yellow
+  [255, 255, 255], // 100% pure white
+];
+
+function feeColor(rate, max) {
+  if (!rate || rate <= 0) return null;
+  const t = Math.min(Math.log1p(rate) / Math.log1p(max), 1);
+  const s = t * (GRADIENT_STOPS.length - 1);
+  const lo = Math.floor(s), hi = Math.min(lo + 1, GRADIENT_STOPS.length - 1);
+  const f = s - lo;
+  const [r1,g1,b1] = GRADIENT_STOPS[lo];
+  const [r2,g2,b2] = GRADIENT_STOPS[hi];
+  const r = Math.round(r1 + (r2-r1)*f);
+  const g = Math.round(g1 + (g2-g1)*f);
+  const b = Math.round(b1 + (b2-b1)*f);
+  return `rgb(${r},${g},${b})`;
 }
 
 function formatFee(rate, forDisplay = false) {
@@ -562,7 +685,7 @@ function render() {
   const currentYear  = new Date().getUTCFullYear();
   const monthNames   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  for (let year = earliestYear; year <= currentYear; year++) {
+  for (let year = currentYear; year >= earliestYear; year--) {
     const isCurrentYear = year === currentYear;
     const yearEnd = isCurrentYear
       ? new Date().toISOString().slice(0, 10)
@@ -657,11 +780,13 @@ function render() {
         } else {
           const entry = dailyData[key];
           const rate  = entry?.avgFeeRate ?? null;
-          const tier  = rate !== null ? feeTier(rate, maxRate) : 0;
-          cell.className = `cell fee-${tier}`;
+          const color = feeColor(rate, maxRate);
+          cell.className = 'cell' + (color ? '' : ' fee-0');
+          if (color) cell.style.background = color;
           cell.addEventListener('mouseenter', e => showTip(e, key, rate, entry));
           cell.addEventListener('mousemove',  e => moveTip(e));
           cell.addEventListener('mouseleave', hideTip);
+          cell.addEventListener('click', () => openDrill(key, rate, cell));
         }
         weekEl.appendChild(cell);
       });
@@ -819,8 +944,145 @@ async function fetchFeeHistory() {
     : `Loaded ${days} days of data`;
   setStatus(msg, failed > 0);
   render();
+  checkHash();
   return true;
 }
+
+// ── Drill-down panel ──────────────────────────────────────────────────────
+let selectedCell = null;
+
+function openDrill(key, rate, cellEl) {
+  // Deselect previous
+  if (selectedCell) selectedCell.classList.remove('selected');
+  selectedCell = cellEl;
+  cellEl.classList.add('selected');
+
+  // Update URL hash
+  history.replaceState(null, '', `#${key}`);
+
+  const panel = $('drill-panel');
+  panel.style.display = 'block';
+
+  // Position popover near the clicked cell
+  const rect    = cellEl.getBoundingClientRect();
+  const pw      = 300;   // panel width
+  const margin  = 8;
+  const scrollY = window.scrollY;
+
+  // Horizontal: align left edge of popover with cell, clamp to viewport
+  let left = rect.left + window.scrollX;
+  if (left + pw > window.innerWidth - margin) {
+    left = window.innerWidth - pw - margin;
+  }
+  if (left < margin) left = margin;
+
+  // Vertical: prefer below cell, flip above if no room
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const panelH = 280; // approximate
+  let top;
+  if (spaceBelow >= panelH + margin) {
+    top = rect.bottom + scrollY + margin;
+    panel.className = 'arrow-below';
+  } else {
+    top = rect.top + scrollY - panelH - margin;
+    panel.className = 'arrow-above';
+  }
+
+  // Arrow horizontal position relative to popover
+  const arrowLeft = Math.min(Math.max(rect.left + window.scrollX - left + rect.width/2, 12), pw - 20);
+  panel.style.setProperty('--arrow-left', arrowLeft + 'px');
+
+  panel.style.left = left + 'px';
+  panel.style.top  = top  + 'px';
+
+  // Date
+  $('drill-date').textContent = fmtDate(key);
+
+  // Fee rate
+  if (rate !== null) {
+    $('drill-fee').textContent = rate < 10 ? rate.toFixed(2) : Math.round(rate);
+    $('drill-fee-unit').textContent = 'sat / vByte';
+
+    // USD cost estimate
+    const usd = btcPrice ? (rate * 250 / 1e8) * btcPrice : null;
+    $('drill-usd').textContent = usd ? (usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`) : '—';
+
+    // vs today
+    if (currentFee !== null) {
+      const ratio = rate / currentFee;
+      if (ratio > 1.01) {
+        $('drill-vs').textContent = `${ratio.toFixed(1)}× higher`;
+        $('drill-vs').style.color = '#f7931a';
+      } else if (ratio < 0.99) {
+        $('drill-vs').textContent = `${(1/ratio).toFixed(1)}× lower`;
+        $('drill-vs').style.color = '#6ecf8a';
+      } else {
+        $('drill-vs').textContent = 'Same as today';
+        $('drill-vs').style.color = 'var(--text)';
+      }
+      $('drill-vs-unit').textContent = `today = ${currentFee} sat/vB`;
+    } else {
+      $('drill-vs').textContent = '—';
+    }
+
+    // Percentile across all data
+    const allRates = Object.values(dailyData).map(d => d.avgFeeRate).filter(Boolean).sort((a,b) => a-b);
+    const rank = allRates.filter(r => r <= rate).length;
+    const pct  = Math.round((rank / allRates.length) * 100);
+    $('drill-pct').textContent = `${pct}th`;
+
+    // Bar: fill shows percentile position, marker shows today
+    const logRate = Math.log1p(rate);
+    const logMax  = Math.log1p(Math.max(...allRates));
+    const barPct  = Math.round((logRate / logMax) * 100);
+    const fillColor = feeColor(rate, Math.max(...allRates));
+    $('drill-bar-fill').style.width  = `${barPct}%`;
+    $('drill-bar-fill').style.background = fillColor ?? 'var(--orange)';
+
+    // Today marker
+    if (currentFee !== null) {
+      const todayPct = Math.round((Math.log1p(currentFee) / logMax) * 100);
+      $('drill-bar-marker').style.left = `${todayPct}%`;
+      $('drill-bar-marker').style.display = 'block';
+    }
+
+    const minR = Math.round(allRates[0]);
+    const maxR = Math.round(allRates[allRates.length - 1]);
+    $('drill-range-label').textContent = `Historical range: ${minR} – ${maxR} sat/vB`;
+  } else {
+    $('drill-fee').textContent = 'No data';
+    $('drill-usd').textContent = '—';
+    $('drill-vs').textContent  = '—';
+    $('drill-pct').textContent = '—';
+    $('drill-bar-fill').style.width = '0%';
+  }
+
+  // Links
+  $('drill-mempool-link').href = `https://mempool.space/block-audits?date=${key}`;
+  $('drill-share-link').onclick = (e) => {
+    e.preventDefault();
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      $('drill-share-link').textContent = 'Copied!';
+      setTimeout(() => $('drill-share-link').textContent = 'Copy link to this day', 1500);
+    });
+  };
+}
+
+function closeDrill() {
+  $('drill-panel').style.display = 'none';
+  if (selectedCell) { selectedCell.classList.remove('selected'); selectedCell = null; }
+  history.replaceState(null, '', window.location.pathname);
+}
+
+// Open panel on load if URL has a date hash
+function checkHash() {
+  const hash = window.location.hash.slice(1);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(hash) && dailyData[hash]) {
+    // Find and click the right cell — just open the panel directly
+    openDrill(hash, dailyData[hash].avgFeeRate, document.createElement('div'));
+  }
+}
+
 
 function setStatus(msg, error = false) {
   $('status-text').textContent = msg;
@@ -829,6 +1091,19 @@ function setStatus(msg, error = false) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDrill();
+});
+
+document.addEventListener('click', e => {
+  const panel = $('drill-panel');
+  if (panel.style.display === 'block'
+      && !panel.contains(e.target)
+      && !e.target.classList.contains('cell')) {
+    closeDrill();
+  }
+});
+
 async function init() {
   renderSkeleton();
   setStatus('Connecting…', false);
@@ -841,5 +1116,44 @@ async function init() {
 
 init();
 </script>
+<!-- DRILL-DOWN POPOVER (fixed, anchored to clicked cell) -->
+<div id="drill-panel">
+  <button class="drill-close" onclick="closeDrill()">✕</button>
+  <div class="drill-date" id="drill-date"></div>
+  <div class="drill-grid">
+    <div class="drill-stat">
+      <div class="drill-stat-label">Fee Rate</div>
+      <div class="drill-stat-value" id="drill-fee">—</div>
+      <div class="drill-stat-unit" id="drill-fee-unit">sat / vByte</div>
+    </div>
+    <div class="drill-stat">
+      <div class="drill-stat-label">Est. Tx Cost</div>
+      <div class="drill-stat-value" id="drill-usd">—</div>
+      <div class="drill-stat-unit">USD (250 vB tx)</div>
+    </div>
+    <div class="drill-stat">
+      <div class="drill-stat-label">vs. Today</div>
+      <div class="drill-stat-value" id="drill-vs">—</div>
+      <div class="drill-stat-unit" id="drill-vs-unit"></div>
+    </div>
+    <div class="drill-stat">
+      <div class="drill-stat-label">Percentile</div>
+      <div class="drill-stat-value" id="drill-pct">—</div>
+      <div class="drill-stat-unit">of all days</div>
+    </div>
+  </div>
+  <div class="drill-bar-wrap">
+    <div class="drill-bar-label">Position in historical range</div>
+    <div class="drill-bar-track">
+      <div class="drill-bar-fill" id="drill-bar-fill"></div>
+      <div class="drill-bar-marker" id="drill-bar-marker"></div>
+    </div>
+    <div class="drill-percentile-label" id="drill-range-label"></div>
+  </div>
+  <div class="drill-links">
+    <a class="drill-link" id="drill-mempool-link" href="#" target="_blank">mempool.space →</a>
+    <a class="drill-link" id="drill-share-link" href="#">Copy link</a>
+  </div>
+</div>
 </body>
 </html>

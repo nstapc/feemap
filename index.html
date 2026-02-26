@@ -257,9 +257,10 @@
       height: 11px;
       border-radius: 2px;
       background: linear-gradient(to right,
-        rgb(0,0,0), rgb(80,10,0), rgb(160,35,0),
-        rgb(220,80,0), rgb(247,147,26),
-        rgb(255,210,80), rgb(255,240,160), rgb(255,255,255));
+        rgb(0,0,4), rgb(22,11,57), rgb(66,10,104),
+        rgb(147,38,103), rgb(188,55,84), rgb(221,81,58),
+        rgb(243,120,18), rgb(252,165,10), rgb(251,205,49),
+        rgb(252,235,90), rgb(252,255,164));
       margin: 0 8px;
     }
 
@@ -522,12 +523,12 @@
 
   <!-- HEATMAP -->
   <div class="heatmap-wrap fade-in" style="animation-delay:0.25s">
-    <div id="heatmap-years"></div>
-    <div class="legend">
+    <div class="legend" style="margin-bottom:18px;">
       <span>LOW</span>
       <div class="legend-gradient"></div>
       <span>HIGH</span>
     </div>
+    <div id="heatmap-years"></div>
   </div>
 
   <!-- STATUS -->
@@ -577,15 +578,21 @@ function fmtDate(key) {
 }
 
 // Control points: [r, g, b] from dark → orange → amber → pale yellow
+// Inferno colormap — perceptually uniform, max dynamic range on dark backgrounds
+// Official control points: black → purple → crimson → orange → yellow-white
 const GRADIENT_STOPS = [
-  [0,   0,   0],   // 0%   pure black
-  [80,  10,  0],   // 15%  deep red-black
-  [160, 35,  0],   // 30%  dark red
-  [220, 80,  0],   // 45%  burnt orange
-  [247, 147, 26],  // 60%  bitcoin orange
-  [255, 210, 80],  // 75%  amber
-  [255, 240, 160], // 90%  pale yellow
-  [255, 255, 255], // 100% pure white
+  [0,   0,   4],   //   0% near-black
+  [22,  11,  57],  //  13% deep purple
+  [66,  10, 104],  //  25% dark violet
+  [106, 23, 110],  //  33% purple
+  [147, 38, 103],  //  42% magenta-purple
+  [188, 55,  84],  //  50% crimson
+  [221, 81,  58],  //  58% red-orange
+  [243, 120,  18], //  67% orange (≈ bitcoin orange)
+  [252, 165,  10], //  75% amber-orange
+  [251, 205,  49], //  83% golden yellow
+  [252, 235,  90], //  92% pale yellow
+  [252, 255, 164], // 100% near-white yellow
 ];
 
 function feeColor(rate, max) {

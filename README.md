@@ -7,33 +7,6 @@ A GitHub-contribution-style calendar heatmap of Bitcoin transaction fees over th
 
 ---
 
-## Features
-
-- 🟠 **365-day heatmap** — GitHub-style calendar showing daily median fee rates (sat/vByte)
-- 💵 **USD mode** — Toggle to estimated USD cost per average transaction
-- 📊 **Live stats** — Current fee, 7-day avg, 30-day avg, yearly peak, BTC price
-- 🔍 **Hover tooltips** — Date, fee rate, and block count on every cell
-- ⚡ **Zero build step** — Pure HTML/CSS/JS, single file
-- 🌐 **Live data** — Fetches directly from [mempool.space](https://mempool.space) public API
-
----
-
-## Deploy to Vercel (60 seconds)
-
-### Option A — Vercel CLI
-```bash
-npm i -g vercel
-vercel
-```
-
-### Option B — GitHub Import
-1. Push this repo to GitHub
-2. Go to [vercel.com/new](https://vercel.com/new)
-3. Import your repo → click **Deploy**
-
-No config needed. Vercel detects the static file automatically.
-
----
 
 ## Run Locally
 
@@ -72,9 +45,3 @@ Edit the CSS variables at the top of `index.html`:
   /* fee heat scale: --c0 (low) through --c6 (high) */
 }
 ```
-
----
-
-## License
-
-MIT — fork it, ship it, do whatever.
